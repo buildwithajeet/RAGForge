@@ -164,8 +164,8 @@ if question:
             docs = retrieve(question, st.session_state.retriever, top_n=5)
             sources = list(set([d.metadata["source"] for d in docs]))
 
-        answer = st.write_stream(generate_stream(question, docs))
-
+        with st.spinner("Generating..."):
+            answer = st.write_stream(generate_stream(question, docs, chat_history))
         with st.expander("Sources"):
             for s in sources:
                 st.markdown(f"- {s}")

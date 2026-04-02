@@ -208,4 +208,6 @@ __marimo__/
 
 #vector databases
 chroma_db
-chroma_db_*
+test.py
+chroma_*
+
