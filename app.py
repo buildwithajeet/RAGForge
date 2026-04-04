@@ -23,9 +23,9 @@ if "kb_ready" not in st.session_state:
     st.session_state.kb_ready = False
 
 # ── cache retriever ─────────────────────────────────────
-@st.cache_resource
-def get_retriever(chunks, persist_dir):
-    return build_hybrid_retriever(chunks, persist_dir)
+# @st.cache_resource
+# def get_retriever(chunks, persist_dir):
+#     return build_hybrid_retriever(chunks, persist_dir)
 
 # ── sidebar ────────────────────────────────────────────
 with st.sidebar:
@@ -110,13 +110,15 @@ if build_btn:
         st.stop()
 
     with st.spinner("Chunking..."):
-        chunks = chunk_docs(docs)
+        chunks, parent_docs = chunk_docs(docs)
 
     kb_hash = hashlib.md5(kb_name.encode()).hexdigest()[:8]
     persist_dir = f"./chroma_db_{kb_hash}"
 
     with st.spinner("Building retriever..."):
-        retriever = get_retriever(chunks, persist_dir)
+        st.session_state.parent_docs = parent_docs
+        # retriever = get_retriever(chunks, persist_dir)
+        retriever = build_hybrid_retriever(chunks, persist_dir)
 
     # ── save KB ────────────────────────────────────────
     st.session_state.kb_registry[kb_name] = {
@@ -162,10 +164,22 @@ if question:
     with st.chat_message("assistant"):
         with st.spinner("Retrieving..."):
             docs = retrieve(question, st.session_state.retriever, top_n=5)
-            sources = list(set([d.metadata["source"] for d in docs]))
-
+            # sources = list(set([d.metadata["source"] for d in docs]))
+            parent_doc_ids = set([d.metadata["parent_id"] for d in docs if "parent_id" in d.metadata])
+            sources = []
+            parent_docs = []
+            print(f"parent_doc_ids: {parent_doc_ids}")
+            print(f"parent_docs list item: {len(parent_docs)}")
+            for pid in parent_doc_ids:
+                parent = st.session_state.parent_docs.get(pid)
+                if parent:
+                    sources.append(f"{parent.metadata['source']} (page {parent.metadata.get('page', 'N/A')})")
+                    parent_docs.append(parent)
+                else:
+                    sources.append("Unknown Source")
+            print(f"parent_docs list: {len(parent_docs)} items, sources list: {len(sources)} items")
         with st.spinner("Generating..."):
-            answer = st.write_stream(generate_stream(question, docs, chat_history))
+            answer = st.write_stream(generate_stream(question, parent_docs, chat_history))
         with st.expander("Sources"):
             for s in sources:
                 st.markdown(f"- {s}")

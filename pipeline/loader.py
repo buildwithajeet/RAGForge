@@ -1,6 +1,7 @@
 import wikipedia
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+import uuid
 
 def load_wikipedia_topics(topics: list[str]) -> list[Document]:
     docs = []
@@ -47,10 +48,31 @@ def load_uploaded_file(file) -> list[Document]:
         return []
 
 
-def chunk_docs(documents: list[Document]) -> list[Document]:
-    splitter = RecursiveCharacterTextSplitter(
+def chunk_docs(documents: list[Document]) -> tuple[list[Document], dict[str, Document]]:
+    # splitter = RecursiveCharacterTextSplitter(
+    #     chunk_size=500,
+    #     chunk_overlap=75,
+    #     separators=["\n\n", "\n", ".", " ", ""]
+    # )
+    # return splitter.split_documents(documents)
+    parent_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=150,
+        separators=["\n\n", "\n", ".", " ", ""]
+    )
+    child_splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=75,
         separators=["\n\n", "\n", ".", " ", ""]
     )
-    return splitter.split_documents(documents)
+    parent_chunks = parent_splitter.split_documents(documents)
+    all_chunk_docs = []
+    parent_docs = {}
+    for parent in parent_chunks:
+        child_chunks = child_splitter.split_documents([parent])
+        parent_id = str(uuid.uuid4())
+        parent_docs[parent_id] = parent
+        for child in child_chunks:
+            child.metadata["parent_id"] = parent_id
+            all_chunk_docs.append(child)
+    return all_chunk_docs, parent_docs

@@ -114,8 +114,8 @@ def rewrite_node(state: RagState):
 def decide_function(state: RagState):
     docs = state["documents"]
     retry_count = state["retry_count"]
-    if len(docs) == 0:
-        return "rewrite"
+    if len(docs) > 0:
+        return "generate"
     elif retry_count > 2:
         return "generate"
     else:
@@ -125,11 +125,12 @@ def decide_function(state: RagState):
 graph = StateGraph(RagState)
 
 graph.add_node("retrieve", retrieve_node)
-graph.add_node("grade", grade_node)
-graph.add_node("rewrite", rewrite_node)
+graph.add_node("grade",    grade_node)
+graph.add_node("rewrite",  rewrite_node)
 graph.add_node("generate", generate_node)
 
 graph.set_entry_point("retrieve")
+graph.add_edge("retrieve", "grade")
 graph.add_conditional_edges(
     "grade",
     decide_function,
@@ -138,9 +139,7 @@ graph.add_conditional_edges(
         "rewrite"  : "rewrite"
     }
 )
-graph.add_edge("retrieve", "grade")
-graph.add_edge("grade",    "generate")
-graph.add_edge("generate", "rewrite")
+graph.add_edge("rewrite",  "retrieve")
 graph.add_edge("generate", END)
 
 
