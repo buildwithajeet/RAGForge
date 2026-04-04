@@ -2,7 +2,7 @@ import wikipedia
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import uuid
-
+import datetime
 def load_wikipedia_topics(topics: list[str]) -> list[Document]:
     docs = []
     for topic in topics:
@@ -48,7 +48,7 @@ def load_uploaded_file(file) -> list[Document]:
         return []
 
 
-def chunk_docs(documents: list[Document]) -> tuple[list[Document], dict[str, Document]]:
+def chunk_docs(documents: list[Document], file_type: str="pdf") -> tuple[list[Document], dict[str, Document]]:
     # splitter = RecursiveCharacterTextSplitter(
     #     chunk_size=500,
     #     chunk_overlap=75,
@@ -68,11 +68,14 @@ def chunk_docs(documents: list[Document]) -> tuple[list[Document], dict[str, Doc
     parent_chunks = parent_splitter.split_documents(documents)
     all_chunk_docs = []
     parent_docs = {}
+    year = datetime.datetime.now().year
     for parent in parent_chunks:
         child_chunks = child_splitter.split_documents([parent])
         parent_id = str(uuid.uuid4())
         parent_docs[parent_id] = parent
         for child in child_chunks:
             child.metadata["parent_id"] = parent_id
+            child.metadata['year'] = year
+            child.metadata['file_type'] = file_type
             all_chunk_docs.append(child)
     return all_chunk_docs, parent_docs

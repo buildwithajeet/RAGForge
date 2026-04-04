@@ -36,6 +36,8 @@ def build_hybrid_retriever(chunks: list[Document], persist_dir:str = './chroma_d
     )
     
     dense_retriver = vector_store.as_retriever(search_kwargs={"k" : RETRIEVER_K}) #query
+    # dense_retriver = vector_store.as_retriever(search_kwargs={"k" : RETRIEVER_K}) #query
+    
     bm25_retriever = BM25Retriever.from_documents(chunks)
     bm25_retriever.k = RETRIEVER_K
     
@@ -55,7 +57,26 @@ def rerank(query: str, docs: list[Document], top_n: int = RERANKER_TOP_N) -> lis
     return [doc for _, doc in scored[:top_n]]
 
 
-def retrieve(query: str, retriever, top_n: int = RERANKER_TOP_N) -> list[Document]:
+""" def retrieve(query: str, retriever, top_n: int = RERANKER_TOP_N) -> list[Document]:
+    retrieved = retriever.invoke(query)
+    reranked  = rerank(query, retrieved, top_n=top_n)
+    return reranked """
+    
+def retrieve(query: str, retriever, top_n: int = RERANKER_TOP_N, filters: dict = {}) -> list[Document]:
+    # build filter
+    where_clauses = {}
+    if filters:
+        for key, value in filters.items():
+            if value:
+                where_clauses[key] = value
+
+    # apply filter to dense retriever (index 1 in EnsembleRetriever)
+    dense = retriever.retrievers[1]
+    if where_clauses and where_clauses != {}:
+        dense.search_kwargs["filter"] = where_clauses
+    else:
+        dense.search_kwargs.pop("filter", None)
+
     retrieved = retriever.invoke(query)
     reranked  = rerank(query, retrieved, top_n=top_n)
     return reranked

@@ -3,7 +3,7 @@ import streamlit as st
 from pipeline.loader import load_wikipedia_topics, load_uploaded_file, chunk_docs
 from pipeline.retriever import build_hybrid_retriever, retrieve
 from pipeline.generator import generate_stream
-
+import sys
 st.set_page_config(page_title="RAGForge", page_icon="🤖", layout="wide")
 
 st.title("RAGForge")
@@ -39,6 +39,7 @@ with st.sidebar:
             placeholder="Retrieval-augmented generation\nLarge language model\nVector database"
         )
     else:
+        
         uploaded_files = st.file_uploader(
             "Upload files",
             type=["txt", "pdf"],
@@ -71,6 +72,16 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
+    st.subheader("Filters")
+    file_type_filter = st.selectbox(
+        "File Type",
+        ["pdf", "txt"]
+    )
+    year_filter = st.selectbox(
+        "Year",
+        ["2026", "2025", "2024", "2023", "2022"]
+    )
+    source_filter = st.text_input("Source contains")
     st.subheader("Pipeline")
     st.markdown("""
     - Hybrid retrieval (BM25 + Dense)
@@ -79,9 +90,9 @@ with st.sidebar:
     """)
 
 # ── build knowledge base ───────────────────────────────
+file_type = ""
 if build_btn:
     docs = []
-
     if source == "Wikipedia":
         if not wiki_topics.strip():
             st.sidebar.error("Please enter at least one topic.")
@@ -100,8 +111,13 @@ if build_btn:
             st.stop()
 
         with st.spinner("Reading files..."):
+            
             for file in uploaded_files:
                 docs.extend(load_uploaded_file(file))
+                if file.name.lower().endswith(".pdf"):
+                    file_type = "pdf"
+                elif file.name.lower().endswith(".txt"):
+                    file_type = "txt"
 
         kb_name = " + ".join([f.name for f in uploaded_files])
 
@@ -110,7 +126,8 @@ if build_btn:
         st.stop()
 
     with st.spinner("Chunking..."):
-        chunks, parent_docs = chunk_docs(docs)
+        print(f"File type : {file_type}")
+        chunks, parent_docs = chunk_docs(docs, file_type=file_type)
 
     kb_hash = hashlib.md5(kb_name.encode()).hexdigest()[:8]
     persist_dir = f"./chroma_db_{kb_hash}"
@@ -163,7 +180,7 @@ if question:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving..."):
-            docs = retrieve(question, st.session_state.retriever, top_n=5)
+            docs = retrieve(question, st.session_state.retriever, top_n=5, filters={"file_type": file_type, "year": year_filter})
             # sources = list(set([d.metadata["source"] for d in docs]))
             parent_doc_ids = set([d.metadata["parent_id"] for d in docs if "parent_id" in d.metadata])
             sources = []
