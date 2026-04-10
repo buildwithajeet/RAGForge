@@ -19,21 +19,28 @@ Built as a portfolio project to demonstrate advanced RAG engineering skills — 
 
 ## Features
 
-- **Hybrid Retrieval** — BM25 sparse search + ChromaDB dense search combined via EnsembleRetriever + Filter With Year and File Type
-- **Chat History** - Managing Chat History for better answer 
-- **Cross-Encoder Reranking** — ms-marco-MiniLM re-scores top 20 chunks, passes best 5 to LLM
+- **Hybrid Retrieval** — BM25 + ChromaDB dense search via EnsembleRetriever
+- **Metadata Filtering** — filter by file type at query time
+- **Parent-Child Chunking** — small chunks for retrieval, large chunks for LLM context
+- **Conversational Memory** — multi-turn chat with history passed to LLM
+- **Cross-Encoder Reranking** — ms-marco-MiniLM re-scores top 20, passes best 5 to LLM
 - **Streaming Responses** — tokens stream word by word in real time
-- **Hallucination Control** — strict prompt keeps answers grounded in retrieved context
+- **Hallucination Control** — strict prompt keeps answers grounded in context
 - **Source Attribution** — every answer shows which document it came from
-- **PDF + Wikipedia Support** — upload PDFs or load Wikipedia articles as knowledge base
+- **PDF + Wikipedia Support** — upload PDFs or load Wikipedia articles
 - **Config-based LLM** — switch between Gemini and Ollama via environment variable
+- **RAGAS Evaluated** — pipeline measured with objective quality metrics
 <!-- - **RAGAS Evaluated** — pipeline measured with objective quality metrics -->
 
 ---
 
 ## RAG Pipeline
+
 ```
 User Query
+    │
+    ▼
+Chat History (last 5 turns) + Active Metadata Filter
     │
     ▼
 Hybrid Retriever (BM25 + ChromaDB, top 20 candidates)
@@ -42,13 +49,17 @@ Hybrid Retriever (BM25 + ChromaDB, top 20 candidates)
 Cross-Encoder Reranker (ms-marco-MiniLM, top 5 selected)
     │
     ▼
-Strict Context Prompt
+Parent Chunk Fetch (rich context for LLM)
+    │
+    ▼
+Strict Context Prompt + Chat History
     │
     ▼
 LLM (Gemini / Ollama) — streaming
     │
     ▼
-Grounded Answer + Sources
+Grounded Answer + Source Attribution
+```
 ```
 
 ---
@@ -79,26 +90,30 @@ Evaluated on 10 question-answer pairs using RAG, LLM, and Vector DB knowledge ba
 | Sparse retrieval | BM25 (rank-bm25) |
 | Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
 | Orchestration | LangChain 1.2 |
+| Evaluation | RAGAS |
 | Config | python-dotenv |
+| PDF parsing | pypdf |
 <!-- | Evaluation | RAGAS | -->
 
 ---
 
 ## Project Structure
+
 ```
 RAGForge/
-├── app.py                  ← Streamlit UI + session management
+├── app.py                  ← Streamlit UI + session + KB registry
 ├── config.py               ← all settings in one place
 ├── pipeline/
 │   ├── __init__.py
-│   ├── loader.py           ← PDF + Wikipedia document loading
-│   ├── retriever.py        ← hybrid retrieval + reranking
-│   └── generator.py        ← LLM + prompt + streaming
-├── evaluate_rag.py         ← RAGAS evaluation script
+│   ├── loader.py           ← PDF + Wikipedia loading + parent-child chunking
+│   ├── retriever.py        ← hybrid retrieval + reranking + metadata filtering
+│   └── generator.py        ← LLM + prompt + streaming + chat history
 ├── .streamlit/
 │   └── config.toml         ← suppress warnings
 ├── requirements.txt
+├── crag_pipeline.py        ← Corrective Rag Pipeline
 └── README.md
+```
 ```
 
 ---
@@ -182,23 +197,69 @@ Single source of truth for all settings. Change LLM provider, chunk size, or ret
 
 ## Roadmap
 
-- [ ] LangGraph CRAG pattern (self-correcting retrieval)
-- [ ] Conversational memory (multi-turn context)
-- [ ] Parent-child chunking
-- [ ] Metadata filtering
-- [ ] HuggingFace Spaces deployment
+- [x] Hybrid Retrieval (BM25 + Dense)
+- [x] Cross-encoder reranking
+- [x] Streaming responses
+- [x] Conversational memory (multi-turn context)
+- [x] Parent-child chunking
+- [x] Metadata filtering
+- [x] RAGAS evaluation
+- [x] LangGraph CRAG pattern (self-correcting retrieval)
+- [x] HuggingFace Spaces deployment
 - [ ] DOCX support
+- [ ] Persistent memory (MySQL)
+- [ ] Docker deployment
 
 ---
 
 ## What I Learned Building This
 
-- Hybrid search consistently outperforms dense-only retrieval for domain-specific queries
-- Reranking with cross-encoders dramatically improves answer quality with minimal latency cost
+**RAG Pipeline Design**
+- Hybrid search (BM25 + Dense) consistently outperforms dense-only retrieval,
+  especially for domain-specific queries with exact keywords
+- Retrieving top 20 and reranking to top 5 gives better results than
+  retrieving top 5 directly — the reranker needs candidates to work with
+- chunk_size and chunk_overlap have more impact on answer quality
+  than embedding model choice
+- Parent-child chunking solves the precision vs context tradeoff —
+  small chunks for retrieval, large chunks for LLM generation
+
+**Evaluation**
 - RAGAS evaluation revealed faithfulness as the critical gap — not retrieval quality
-- chunk_size and chunk_overlap have more impact on answer quality than embedding model choice
+- Without evaluation you are guessing — RAGAS gives you numbers to optimize against
+- Building a 10-20 question test dataset before optimizing saves significant time
+
+**LangGraph + Agentic RAG**
+- Linear RAG pipelines fail silently — LangGraph adds self-correction
+- CRAG pattern (retrieve → grade → rewrite → retry) significantly reduces
+  irrelevant answers
+- Nodes should return partial state dicts — LangGraph handles merging
+
+**Production Lessons**
+- Metadata filtering must happen at query time not build time
+- Conversational memory must be explicitly passed to LLM every call —
+  LLMs are stateless by design
+- Empty ChromaDB filter dict crashes — always pass None instead of {}
+- Switching embedding models requires deleting old ChromaDB collections
+- Temperature=0 is non-negotiable for RAG — creativity causes hallucination
+
+**Debugging Insights**
+- Most RAG failures are retrieval failures not LLM failures
+- Always check chunk content before blaming the embedding model
+- PDF raw bytes vs extracted text is the most common loader bug
 
 ---
+
+**Why parent-child chunking?**
+Small chunks (200 chars) give precise similarity matching during retrieval.
+Large parent chunks (1000 chars) give the LLM rich context to generate 
+complete answers. One chunk size can't satisfy both needs.
+
+**Why metadata filtering at query time?**
+Filters applied at build time are fixed forever. Query-time filtering 
+lets users dynamically narrow search scope per question — 
+search only PDFs, only specific sources, or all documents.
+
 
 ## License
 
@@ -208,7 +269,8 @@ MIT License — free to use, modify, and distribute.
 
 ## Author
 
-Built by **Ajeet** — Backend Engineer learning AI in public.
+Built by **Ajeet** — Senior Backend Engineer learning AI in public.
 
-- LinkedIn: [https://www.linkedin.com/in/ajeet-yadav-55a0861a0/]
-- GitHub: [https://github.com/buildwithajeet]
+- 🔗 LinkedIn: [Ajeet Yadav](https://www.linkedin.com/in/ajeet-yadav-55a0861a0/)
+- 🐙 GitHub: [buildwithajeet](https://github.com/buildwithajeet)
+- 📸 Instagram: [buildwithajeet](https://instagram.com/buildwithajeet)
