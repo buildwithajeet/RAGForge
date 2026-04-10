@@ -97,7 +97,9 @@ Evaluated on 10 question-answer pairs using RAG, LLM, and Vector DB knowledge ba
 
 ---
 
+
 ## Project Structure
+
 ```
 RAGForge/
 ├── app.py                  ← Streamlit UI + session + KB registry
@@ -107,10 +109,10 @@ RAGForge/
 │   ├── loader.py           ← PDF + Wikipedia loading + parent-child chunking
 │   ├── retriever.py        ← hybrid retrieval + reranking + metadata filtering
 │   └── generator.py        ← LLM + prompt + streaming + chat history
+├── crag_pipeline.py        ← Corrective Rag Pipeline
 ├── .streamlit/
 │   └── config.toml         ← suppress warnings
 ├── requirements.txt
-├── crag_pipeline.py        ← Corrective Rag Pipeline
 └── README.md
 ```
 ```
