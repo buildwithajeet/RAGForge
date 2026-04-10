@@ -98,7 +98,6 @@ Evaluated on 10 question-answer pairs using RAG, LLM, and Vector DB knowledge ba
 ---
 
 ## Project Structure
-
 ```
 RAGForge/
 ├── app.py                  ← Streamlit UI + session + KB registry
