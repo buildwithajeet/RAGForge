@@ -19,7 +19,8 @@ Built as a portfolio project to demonstrate advanced RAG engineering skills — 
 
 ## Features
 
-- **Hybrid Retrieval** — BM25 sparse search + ChromaDB dense search combined via EnsembleRetriever
+- **Hybrid Retrieval** — BM25 sparse search + ChromaDB dense search combined via EnsembleRetriever + Filter With Year and File Type
+- **Chat History** - Managing Chat History for better answer 
 - **Cross-Encoder Reranking** — ms-marco-MiniLM re-scores top 20 chunks, passes best 5 to LLM
 - **Streaming Responses** — tokens stream word by word in real time
 - **Hallucination Control** — strict prompt keeps answers grounded in retrieved context
