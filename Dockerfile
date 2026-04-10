@@ -19,5 +19,6 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 CMD ["streamlit", "run", "app.py", \
      "--server.port=7860", \
      "--server.address=0.0.0.0", \
+     "--server.maxUploadSize=200", \
      "--logger.level=error", \
      "--server.fileWatcherType=none"]
