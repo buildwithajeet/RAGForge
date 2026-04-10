@@ -31,7 +31,7 @@ if "kb_ready" not in st.session_state:
 with st.sidebar:
     st.header("Knowledge Base")
 
-    source = st.radio("Source", ["Wikipedia", "Upload files"])
+    source = st.radio("Source", ["Upload files"])
 
     if source == "Wikipedia":
         wiki_topics = st.text_area(
@@ -42,7 +42,7 @@ with st.sidebar:
         
         uploaded_files = st.file_uploader(
             "Upload files",
-            type=["txt", "pdf"],
+            type=["pdf"],
             accept_multiple_files=True
         )
 
@@ -81,7 +81,7 @@ with st.sidebar:
         "Year",
         ["2026", "2025", "2024", "2023", "2022"]
     )
-    source_filter = st.text_input("Source contains")
+    # source_filter = st.text_input("Source contains")
     st.subheader("Pipeline")
     st.markdown("""
     - Hybrid retrieval (BM25 + Dense)
@@ -180,6 +180,9 @@ if question:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving..."):
+            file_type = file_type_filter if file_type_filter else None
+            # print(f"Applying filters - file_type: {file_type}")
+            # sys.exit()
             docs = retrieve(question, st.session_state.retriever, top_n=5, filters={"file_type": file_type, "year": year_filter})
             # sources = list(set([d.metadata["source"] for d in docs]))
             parent_doc_ids = set([d.metadata["parent_id"] for d in docs if "parent_id" in d.metadata])

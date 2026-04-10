@@ -64,15 +64,28 @@ def rerank(query: str, docs: list[Document], top_n: int = RERANKER_TOP_N) -> lis
     
 def retrieve(query: str, retriever, top_n: int = RERANKER_TOP_N, filters: dict = {}) -> list[Document]:
     # build filter
-    where_clauses = {}
+    print("", end="\n")
+    print("Applying filters:", filters)
+    conditions = []
+    where_clauses = None
     if filters:
         for key, value in filters.items():
-            if value:
-                where_clauses[key] = value
+            if key != "file_type" and value:
+                conditions.append({key: value})
+            elif key == "file_type" and value:
+                conditions.append({"type": value})
 
+    if len(conditions) == 0:
+        where_clauses = None
+    elif len(conditions) == 1:
+        where_clauses = conditions[0]
+    else:
+        where_clauses = {"$and": conditions}
     # apply filter to dense retriever (index 1 in EnsembleRetriever)
+    print("Constructed where_clauses:", where_clauses)
+    print("Conditions for filtering:", conditions)
     dense = retriever.retrievers[1]
-    if where_clauses and where_clauses != {}:
+    if where_clauses:
         dense.search_kwargs["filter"] = where_clauses
     else:
         dense.search_kwargs.pop("filter", None)

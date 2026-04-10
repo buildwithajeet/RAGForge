@@ -76,6 +76,6 @@ def chunk_docs(documents: list[Document], file_type: str="pdf") -> tuple[list[Do
         for child in child_chunks:
             child.metadata["parent_id"] = parent_id
             child.metadata['year'] = year
-            child.metadata['file_type'] = file_type
+            child.metadata['type'] = file_type
             all_chunk_docs.append(child)
     return all_chunk_docs, parent_docs
