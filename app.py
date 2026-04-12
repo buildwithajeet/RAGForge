@@ -2,12 +2,12 @@ import hashlib
 import streamlit as st
 from pipeline.loader import load_wikipedia_topics, load_uploaded_file, chunk_docs
 from pipeline.retriever import build_hybrid_retriever, retrieve
-from pipeline.generator import generate_stream
-import sys
+from pipeline.generator import generate_stream, generate
+
 st.set_page_config(page_title="RAGForge", page_icon="🤖", layout="wide")
 
-st.title("RAGForge")
-st.caption("Production RAG — Hybrid Retrieval · Reranking · Streaming")
+st.title("RAGForge – Intelligent Document AI")
+st.caption("Hybrid Retrieval · Reranking · Parent-Child · Memory · Streaming · Summary")
 
 # ── session state ──────────────────────────────────────
 if "kb_registry" not in st.session_state:
@@ -22,35 +22,27 @@ if "retriever" not in st.session_state:
 if "kb_ready" not in st.session_state:
     st.session_state.kb_ready = False
 
-# ── cache retriever ─────────────────────────────────────
-# @st.cache_resource
-# def get_retriever(chunks, persist_dir):
-#     return build_hybrid_retriever(chunks, persist_dir)
+if "summary" not in st.session_state:
+    st.session_state.summary = None
 
 # ── sidebar ────────────────────────────────────────────
 with st.sidebar:
     st.header("Knowledge Base")
 
-    source = st.radio("Source", ["Upload files"])
-
-    if source == "Wikipedia":
-        wiki_topics = st.text_area(
-            "Topics (one per line)",
-            placeholder="Retrieval-augmented generation\nLarge language model\nVector database"
-        )
-    else:
-        
-        uploaded_files = st.file_uploader(
-            "Upload files",
-            type=["pdf"],
-            accept_multiple_files=True
-        )
+    uploaded_files = st.file_uploader(
+        "Upload files",
+        type=["pdf"],
+        accept_multiple_files=True
+    )
 
     build_btn = st.button("Build Knowledge Base", type="primary", use_container_width=True)
 
+    st.divider()
+
+    generate_summary_btn = st.button("📄 Generate Summary", use_container_width=True)
+
     # ── existing KB selector ───────────────────────────
     if st.session_state.kb_registry:
-        st.divider()
         st.subheader("Your Knowledge Bases")
 
         selected_kb = st.selectbox(
@@ -73,71 +65,54 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Filters")
-    file_type_filter = st.selectbox(
-        "File Type",
-        ["pdf", "txt"]
-    )
-    year_filter = st.selectbox(
-        "Year",
-        ["2026", "2025", "2024", "2023", "2022"]
-    )
-    # source_filter = st.text_input("Source contains")
+
+    file_type_filter = st.selectbox("File Type", ["pdf", "txt"])
+    year_filter = st.selectbox("Year", ["2026", "2025", "2024", "2023", "2022"])
+
     st.subheader("Pipeline")
     st.markdown("""
-    - Hybrid retrieval (BM25 + Dense)
-    - Cross-encoder reranking
-    - Streaming generation
+    ✔ Hybrid Retrieval (BM25 + Dense)  
+    ✔ Cross-Encoder Reranking  
+    ✔ Parent-Child Chunking  
+    ✔ Conversational Memory  
+    ✔ Metadata Filtering  
+    ✔ Streaming Responses  
+    ✔ Smart Summarization  
     """)
 
 # ── build knowledge base ───────────────────────────────
 file_type = ""
 if build_btn:
     docs = []
-    if source == "Wikipedia":
-        if not wiki_topics.strip():
-            st.sidebar.error("Please enter at least one topic.")
-            st.stop()
 
-        topics = [t.strip() for t in wiki_topics.split("\n") if t.strip()]
+    if not uploaded_files:
+        st.sidebar.error("Please upload at least one file.")
+        st.stop()
 
-        with st.spinner("Loading Wikipedia..."):
-            docs = load_wikipedia_topics(topics)
-
-        kb_name = ", ".join(topics)
-
-    else:
-        if not uploaded_files:
-            st.sidebar.error("Please upload at least one file.")
-            st.stop()
-
-        with st.spinner("Reading files..."):
-            
-            for file in uploaded_files:
-                docs.extend(load_uploaded_file(file))
-                if file.name.lower().endswith(".pdf"):
-                    file_type = "pdf"
-                elif file.name.lower().endswith(".txt"):
-                    file_type = "txt"
-
-        kb_name = " + ".join([f.name for f in uploaded_files])
+    with st.spinner("Reading files..."):
+        for file in uploaded_files:
+            docs.extend(load_uploaded_file(file))
+            if file.name.lower().endswith(".pdf"):
+                file_type = "pdf"
+            elif file.name.lower().endswith(".txt"):
+                file_type = "txt"
 
     if not docs:
         st.sidebar.error("No content loaded.")
         st.stop()
 
     with st.spinner("Chunking..."):
-        print(f"File type : {file_type}")
         chunks, parent_docs = chunk_docs(docs, file_type=file_type)
 
+    kb_name = " + ".join([f.name for f in uploaded_files])
     kb_hash = hashlib.md5(kb_name.encode()).hexdigest()[:8]
     persist_dir = f"./chroma_db_{kb_hash}"
 
     with st.spinner("Building retriever..."):
-        st.session_state.parent_docs = parent_docs
-        # retriever = get_retriever(chunks, persist_dir)
         retriever = build_hybrid_retriever(chunks, persist_dir)
 
-    # ── save KB ────────────────────────────────────────
+    st.session_state.parent_docs = parent_docs
+
     st.session_state.kb_registry[kb_name] = {
         "retriever": retriever,
         "chat_history": []
@@ -146,6 +121,7 @@ if build_btn:
     st.session_state.kb_name = kb_name
     st.session_state.retriever = retriever
     st.session_state.kb_ready = True
+    st.session_state.summary = None  # reset summary
 
     st.sidebar.success(f"KB Ready: {kb_name}")
     st.rerun()
@@ -155,9 +131,43 @@ if not st.session_state.kb_ready:
     st.info("Build or select a knowledge base to start.")
     st.stop()
 
-# ── current KB ─────────────────────────────────────────
 kb = st.session_state.kb_registry[st.session_state.kb_name]
 chat_history = kb["chat_history"]
+
+# ── summary generation ─────────────────────────────────
+if generate_summary_btn:
+    with st.spinner("Generating smart summary..."):
+
+        summary_docs = retrieve(
+            "Summarize the document",
+            st.session_state.retriever,
+            top_n=5
+        )
+
+        seen = set()
+        parent_docs = []
+
+        for d in summary_docs:
+            pid = d.metadata.get("parent_id")
+            if pid and pid not in seen:
+                parent = st.session_state.parent_docs.get(pid)
+                if parent:
+                    parent_docs.append(parent)
+                    seen.add(pid)
+
+        st.session_state.summary = generate(
+            """Summarize the document with:
+            1. Short overview
+            2. Key points (bullet)
+            3. Important insights""",
+            parent_docs,
+            []
+        )
+
+# ── show summary ───────────────────────────────────────
+if st.session_state.summary:
+    with st.expander("📄 Document Summary", expanded=True):
+        st.markdown(st.session_state.summary)
 
 # ── display chat ───────────────────────────────────────
 for msg in chat_history:
@@ -172,7 +182,6 @@ for msg in chat_history:
 question = st.chat_input("Ask anything...")
 
 if question:
-    # user message
     chat_history.append({"role": "user", "content": question})
 
     with st.chat_message("user"):
@@ -180,26 +189,38 @@ if question:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving..."):
-            file_type = file_type_filter if file_type_filter else None
-            # print(f"Applying filters - file_type: {file_type}")
-            # sys.exit()
-            docs = retrieve(question, st.session_state.retriever, top_n=5, filters={"file_type": file_type, "year": year_filter})
-            # sources = list(set([d.metadata["source"] for d in docs]))
-            parent_doc_ids = set([d.metadata["parent_id"] for d in docs if "parent_id" in d.metadata])
-            sources = []
+            filters = {
+                "file_type": file_type_filter,
+                "year": year_filter
+            }
+
+            docs = retrieve(
+                question,
+                st.session_state.retriever,
+                top_n=5,
+                filters=filters
+            )
+
+            seen = set()
             parent_docs = []
-            print(f"parent_doc_ids: {parent_doc_ids}")
-            print(f"parent_docs list item: {len(parent_docs)}")
-            for pid in parent_doc_ids:
-                parent = st.session_state.parent_docs.get(pid)
-                if parent:
-                    sources.append(f"{parent.metadata['source']} (page {parent.metadata.get('page', 'N/A')})")
-                    parent_docs.append(parent)
-                else:
-                    sources.append("Unknown Source")
-            print(f"parent_docs list: {len(parent_docs)} items, sources list: {len(sources)} items")
+            sources = []
+
+            for d in docs:
+                pid = d.metadata.get("parent_id")
+                if pid and pid not in seen:
+                    parent = st.session_state.parent_docs.get(pid)
+                    if parent:
+                        parent_docs.append(parent)
+                        sources.append(
+                            f"{parent.metadata['source']} (page {parent.metadata.get('page', 'N/A')})"
+                        )
+                        seen.add(pid)
+
         with st.spinner("Generating..."):
-            answer = st.write_stream(generate_stream(question, parent_docs, chat_history))
+            answer = st.write_stream(
+                generate_stream(question, parent_docs, chat_history)
+            )
+
         with st.expander("Sources"):
             for s in sources:
                 st.markdown(f"- {s}")
